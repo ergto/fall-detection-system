@@ -1,0 +1,143 @@
+FALL DETECTION SYSTEM — FRONTEND HANDOFF
+========================================
+Project: Group A, Fall Detection Alert System
+Repository: https://github.com/ergto/fall-detection-system
+
+1. CURRENTLY IMPLEMENTED
+------------------------
+Files:
+- app.py: Streamlit application, sidebar controls, metrics, and alert simulation.
+- detection_logic.py: evaluate_detection(detections, confidence_threshold).
+- requirements.txt: Python dependencies for current frontend environment.
+- .gitignore: Excludes virtual environment and other local/generated files.
+
+Frontend includes:
+- Input choice: "Upload Video" or "Live Camera".
+- Upload UI for MP4, AVI, MOV, with filename and size displayed.
+- Live Camera selection with a placeholder Start Camera button (not yet streaming).
+- Model selector: "YOLO11n" or "Faster R-CNN".
+- Adjustable confidence threshold slider (0.0–1.0, step 0.05).
+- Streamlit metrics for frame number, detection confidence, and fall events.
+- A simulation button for testing fall alerts with simulated confidence.
+- st.error() fall alert and st.success() no-fall status.
+
+IMPORTANT: The current app is a frontend prototype. Real video frame processing,
+camera capture, model inference, annotated bounding boxes, and real detection-driven
+metric updates are NOT yet connected.
+
+2. EXPECTED SHARED MODEL INTERFACE (TO AGREE WITH MODEL DEVELOPER)
+----------------------------------------------------------------
+Suggested functions:
+
+    detect_yolo(frame) -> annotated_frame, detections, inference_ms
+    detect_fasterrcnn(frame) -> annotated_frame, detections, inference_ms
+
+Input:
+- frame: a single OpenCV BGR image (NumPy array).
+
+Outputs:
+- annotated_frame: BGR image with bounding boxes and labels already drawn.
+- detections: list of dictionaries with a STANDARDIZED class name and confidence.
+- inference_ms: model inference time in milliseconds (float).
+
+Expected detection format:
+
+    {
+        "class_name": "fall",        # exact label for detected fall
+        "confidence": 0.91,         # number from 0.0 to 1.0
+        "bbox": [100, 80, 300, 450] # optional coordinates [x1,y1,x2,y2]
+    }
+
+Use "class_name" consistently for BOTH models. The examples in the assignment
+use different raw fields (e.g. class_id or label), so those outputs need to be
+normalized before passing them to the frontend's evaluation function.
+
+IMPORTANT MODEL LIMITATION: Standard COCO-pretrained YOLO11n and Faster R-CNN do
+not directly detect falls. The model developer must implement or supply a valid
+fall classification method and explain its limitations. Do not treat a generic
+"person" detection as a fall.
+
+3. EXISTING ALERT LOGIC
+-----------------------
+Import in app.py:
+
+    from detection_logic import evaluate_detection
+
+Usage:
+
+    fall_detected, fall_confidence = evaluate_detection(
+        detections, confidence_threshold
+    )
+
+The function searches the detections for class_name == "fall", takes the
+maximum fall confidence, and returns:
+- fall_detected: boolean, True if confidence >= selected threshold.
+- fall_confidence: float, highest fall-class confidence (0.0 when absent).
+
+The model selection currently changes the selected UI value only. Integration
+must dispatch to the selected model's function.
+
+4. STREAMLIT SESSION VARIABLES
+------------------------------
+Currently used in app.py:
+
+    st.session_state.frame_number           # integer; starts at 0
+    st.session_state.detection_confidence   # float 0.0–1.0; starts at 0.0
+    st.session_state.fall_events            # integer; starts at 0
+    st.session_state.fall_alert             # boolean; set by simulation
+
+After processing each frame, integration code should update the frame number,
+the current fall detection confidence, and the alert state. In the current
+simulation, each button click increments frame_number, and each positive click
+increments fall_events. This is NOT appropriate for continuous video; a single
+physical fall may appear in many consecutive frames. Count distinct fall events
+(e.g. on transition from no-fall to fall, potentially with temporal smoothing).
+
+Suggested integration sketch (illustration only, not implemented):
+
+    annotated_frame, detections, inference_ms = selected_detector(frame)
+    fall_detected, fall_confidence = evaluate_detection(
+        detections, confidence_threshold
+    )
+    # Update st.session_state and UI from those outputs.
+    # Convert OpenCV BGR to RGB before st.image(...).
+
+5. INTEGRATION RESPONSIBILITIES
+-------------------------------
+Model / inference teammate:
+- Provide working detection functions for YOLO11n and Faster R-CNN.
+- Handle frame-by-frame inference and bounding-box overlays.
+- Normalize detection output structure for both models.
+- Ensure there is a justified method to classify actual falls.
+
+Frontend / application logic:
+- Connect the selected source and selected model to the inference functions.
+- Display annotated frames supplied by the inference code.
+- Use evaluate_detection() to set fall warning state and confidence.
+- Maintain accurate running frame and distinct-fall-event counters.
+- Replace placeholder camera button / simulated test in production demo.
+
+6. LOCAL SETUP
+--------------
+Create a virtual environment, activate it, install the requirements, then run:
+
+    python -m pip install -r requirements.txt
+    python -m streamlit run app.py
+
+The installed packages in requirements.txt currently reflect the frontend
+environment; model dependencies such as torch, torchvision, ultralytics and
+opencv-python may need to be added when integrating the inference code.
+
+7. TEAM CHECK BEFORE DEMO
+-------------------------
+[ ] Video upload is processed frame by frame.
+[ ] Live camera streams frames (not just a placeholder button).
+[ ] Model selector actually changes inference model.
+[ ] Bounding boxes and classes are shown.
+[ ] Threshold and alert logic use real fall classifications.
+[ ] Metrics update correctly during processing.
+[ ] One fall is not counted repeatedly across adjacent frames.
+[ ] Both models and required dependencies work on the target laptop.
+
+This handoff describes the currently tested Streamlit prototype and the
+proposed integration contract, not a fully integrated fall detector.
